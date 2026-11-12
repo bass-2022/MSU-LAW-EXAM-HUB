@@ -13,7 +13,38 @@ function renderHome(){$('#statSubjects').textContent=subjects.length;$('#statDoc
 function renderDocs(){const q=$('#docSearch').value.toLowerCase(),cat=$('#categoryFilter').value,year=$('#yearFilter').value;const found=docs.filter(d=>(!cat||subject(d.subjectId).category===cat)&&(!year||String(d.year)===year)&&[d.title,d.description,subject(d.subjectId).name,subject(d.subjectId).code].join(' ').toLowerCase().includes(q));$('#docsGrid').replaceChildren();if(!found.length)$('#docsGrid').append(el('div','ไม่พบเอกสารตามเงื่อนไขที่เลือก','empty'));found.forEach(d=>$('#docsGrid').append(docCard(d)))}
 ['docSearch','categoryFilter','yearFilter'].forEach(id=>$('#'+id).addEventListener(id==='docSearch'?'input':'change',renderDocs));
 function refreshSelects(){let cat=$('#categoryFilter'),old=cat.value;cat.innerHTML='<option value="">ทุกหมวดหมู่</option>'+categories.map(c=>`<option>${esc(c)}</option>`).join('');cat.value=old;$('#newSubjectCategory').innerHTML=categories.map(c=>`<option>${esc(c)}</option>`).join('');let options=subjects.map(s=>`<option value="${s.id}">${esc(s.code+' • '+s.name)}</option>`).join('');$('#submitSubject').innerHTML=options;$('#practiceSubject').innerHTML='<option value="">ทุกวิชา</option>'+options}
-$('#startPractice').onclick=()=>{const sid=$('#practiceSubject').value,qs=questions.filter(q=>!sid||q.subjectId==sid),area=$('#practiceArea');area.replaceChildren();if(!qs.length){area.append(el('p','ยังไม่มีข้อฝึกหัดในวิชานี้'));return}const form=el('form');qs.forEach((q,i)=>{let block=el('div',undefined,'question');block.innerHTML=`<strong>ข้อ ${i+1}. ${esc(q.text)}</strong><p class="muted">${esc(subject(q.subjectId).name)}</p>`;q.options.forEach((o,j)=>{let label=el('label',undefined,'option'),radio=el('input');radio.type='radio';radio.name='q'+i;radio.value=j;label.append(radio,document.createTextNode(' '+o));block.append(label)});form.append(block)});let b=el('button','ตรวจคำตอบ','primary');b.type='submit';form.append(b);form.onsubmit=async e=>{e.preventDefault();const answers={};qs.forEach((q,i)=>{let checked=form.querySelector(`input[name="q${i}"]:checked`);if(checked)answers[q.id]=Number(checked.value)});try{let result=await api('/quiz/grade',json('POST',{answers}));$('#feedback')?.remove();let fb=el('div',undefined,'card');fb.id='feedback';fb.style.marginTop='16px';fb.append(el('h3',`คะแนน ${result.score} / ${qs.length}`));result.results.forEach(x=>fb.append(el('p',`${x.correct?'✅':'❌'} ข้อ ${qs.findIndex(q=>q.id===x.id)+1}: ${x.explain}`)));area.append(fb)}catch(err){alert(err.message)}};area.append(form)};
+$('#startPractice').onclick=()=>{const sid=$('#practiceSubject').value,qs=questions.filter(q=>!sid||q.subjectId==sid),area=$('#practiceArea');area.replaceChildren();if(!qs.length){area.append(el('p','ยังไม่มีข้อฝึกหัดในวิชานี้'));return}const form=el('form');qs.forEach((q,i)=>{let block=el('div',undefined,'question');block.innerHTML=`<strong>ข้อ ${i+1}. ${esc(q.text)}</strong><p class="muted">${esc(subject(q.subjectId).name)}</p>`;q.options.forEach((o,j)=>{let label=el('label',undefined,'option'),radio=el('input');radio.type='radio';radio.name='q'+i;radio.value=j;label.append(radio,document.createTextNode(' '+o));block.append(label)});form.append(block)});let b=el('button','ตรวจคำตอบ','primary');b.type='submit';form.append(b);form.onsubmit=async e=>{e.preventDefault();const answers={};qs.forEach((q,i)=>{let checked=form.querySelector(`input[name="q${i}"]:checked`);if(checked)answers[q.id]=Number(checked.value)});try{let result=await api('/quiz/grade',json('POST',{answers}));
+        // Persist only authenticated members' answers, grouped by subject.
+        // The backend calculates and stores the score independently.
+        let savedMessage='';
+        const selected=Object.entries(answers);
+        if(selected.length){
+          try{
+            const me=await api('/members/me');
+            if(me && me.id){
+              const groups={};
+              for(const [qid,answer] of selected){
+                const question=qs.find(q=>String(q.id)===qid);
+                if(!question)continue;
+                const sid=String(question.subjectId);
+                (groups[sid]??={})[qid]=answer;
+              }
+              let saved=0;
+              for(const [sid,group] of Object.entries(groups)){
+                await api('/members/exams/submit',json('POST',{subjectId:Number(sid),answers:group}));
+                saved++;
+              }
+              savedMessage=saved?'บันทึกผลการฝึกลงประวัติสมาชิกแล้ว ('+saved+' รายวิชา)':'';
+            }
+          }catch(saveError){
+            if(!saveError.message.includes('กรุณาเข้าสู่ระบบสมาชิก')){
+              savedMessage='ตรวจคำตอบได้แล้ว แต่ยังบันทึกประวัติสมาชิกไม่ได้: '+saveError.message;
+            }else{
+              savedMessage='เข้าสู่ระบบสมาชิกเพื่อบันทึกคะแนนย้อนหลัง';
+            }
+          }
+        }
+        $('#feedback')?.remove();let fb=el('div',undefined,'card');fb.id='feedback';fb.style.marginTop='16px';fb.append(el('h3',`คะแนน ${result.score} / ${qs.length}`));if(savedMessage)fb.append(el('p',savedMessage,'muted'));result.results.forEach(x=>fb.append(el('p',`${x.correct?'✅':'❌'} ข้อ ${qs.findIndex(q=>q.id===x.id)+1}: ${x.explain}`)));area.append(fb)}catch(err){alert(err.message)}};area.append(form)};
 async function refresh(){const [s,d,q,a]=await Promise.all([api('/subjects'),api('/documents'),api('/questions'),api('/session')]);subjects=s;docs=d;questions=q;isAdmin=a.admin;$('#accountBtn').textContent=isAdmin?'ออกจากระบบผู้ดูแล':'เข้าสู่ระบบ';refreshSelects();renderHome();renderDocs();if(isAdmin)await renderAdmin()}
 async function renderAdmin(){if(!isAdmin)return;$('#adminLocked').classList.add('hidden');$('#adminContent').classList.remove('hidden');try{const pending=await api('/documents?status=pending');$('#pendingList').replaceChildren();if(!pending.length)$('#pendingList').append(el('div','ไม่มีเอกสารรออนุมัติ','empty'));pending.forEach(d=>{const card=el('div',undefined,'card');card.style.marginBottom='10px';card.innerHTML=`<strong>${esc(d.title)}</strong><p class="muted">${esc(subject(d.subjectId).name)} • ${esc(d.description)}</p>`;const row=el('div',undefined,'actions');let link=el('a','ดูไฟล์','outline');link.href='/api/documents/'+d.id+'/file';link.target='_blank';row.append(link);[['อนุมัติ','approved'],['ปฏิเสธ','rejected']].forEach(([label,status])=>{let b=el('button',label,status==='approved'?'primary':'outline');b.onclick=async()=>{try{await api('/documents/'+d.id+'/status',json('POST',{status}));await refresh()}catch(e){alert(e.message)}};row.append(b)});card.append(row);$('#pendingList').append(card)});$('#adminDocs').replaceChildren();docs.forEach(d=>{let row=el('div',undefined,'card');row.style.marginBottom='8px';row.append(el('strong',d.title+' — '+subject(d.subjectId).name));let b=el('button','ถอนเผยแพร่','outline');b.style.marginLeft='12px';b.onclick=async()=>{if(confirm('ถอนเผยแพร่เอกสารนี้?')){await api('/documents/'+d.id+'/status',json('POST',{status:'rejected'}));await refresh()}};row.append(b);$('#adminDocs').append(row)})}catch(e){alert(e.message)}}
 $('#subjectForm').onsubmit=async e=>{e.preventDefault();let f=new FormData(e.target);try{await api('/subjects',json('POST',Object.fromEntries(f)));e.target.reset();await refresh()}catch(err){alert(err.message)}};
