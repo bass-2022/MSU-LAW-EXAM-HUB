@@ -110,6 +110,7 @@ def init():
             subject_id INTEGER NOT NULL REFERENCES subjects(id),
             text TEXT NOT NULL, options TEXT NOT NULL,
             answer INTEGER NOT NULL, explain TEXT NOT NULL)"""))
+        c.execute(text("ALTER TABLE questions ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE"))
         for code, name, category in SEEDS:
             c.execute(text("""INSERT INTO subjects(code,name,category)
                 VALUES (:code,:name,:category) ON CONFLICT (code) DO NOTHING"""),
@@ -279,10 +280,84 @@ def change_status(doc_id):
 
 @app.get("/api/questions")
 def questions():
-    rows = fetchall("SELECT id,subject_id,text,options FROM questions")
+    rows = fetchall("SELECT id,subject_id,text,options FROM questions WHERE active=TRUE")
     return jsonify([{"id": row["id"], "subjectId": row["subject_id"],
                      "text": row["text"], "options": json.loads(row["options"])}
                     for row in rows])
+
+@app.get("/api/admin/questions")
+def admin_questions():
+    if not admin():
+        return forbidden()
+    rows = fetchall("SELECT id,subject_id,text,options,answer,explain,active FROM questions ORDER BY id DESC")
+    return jsonify([{"id": r["id"], "subjectId": r["subject_id"], "text": r["text"],
+                     "options": json.loads(r["options"]), "answer": r["answer"],
+                     "explain": r["explain"], "active": r["active"]} for r in rows])
+
+
+def validated_question(data):
+    if not isinstance(data, dict):
+        return None
+    try:
+        sid = int(data.get("subjectId"))
+        answer = int(data.get("answer"))
+    except (TypeError, ValueError):
+        return None
+    question_text = str(data.get("text", "")).strip()
+    explain = str(data.get("explain", "")).strip()
+    options = data.get("options")
+    if (not 1 <= len(question_text) <= 2000 or len(explain) > 4000
+            or not isinstance(options, list) or len(options) != 4
+            or any(not isinstance(o, str) or not 1 <= len(o.strip()) <= 500 for o in options)
+            or answer not in range(4)):
+        return None
+    if not fetchone("SELECT id FROM subjects WHERE id=:id", {"id": sid}):
+        return None
+    return {"sid": sid, "q": question_text, "opts": json.dumps([o.strip() for o in options], ensure_ascii=False),
+            "answer": answer, "explain": explain}
+
+
+@app.post("/api/admin/questions")
+def add_question():
+    if not admin():
+        return forbidden()
+    params = validated_question(request.get_json(silent=True))
+    if params is None:
+        return jsonify(error="ข้อมูลข้อสอบไม่ถูกต้อง กรุณาตรวจสอบรายวิชา ตัวเลือก และคำตอบ"), 400
+    with engine.begin() as c:
+        qid = c.execute(text("""INSERT INTO questions(subject_id,text,options,answer,explain)
+                  VALUES(:sid,:q,:opts,:answer,:explain) RETURNING id"""), params).scalar_one()
+    return jsonify(ok=True, id=qid), 201
+
+
+@app.put("/api/admin/questions/<int:qid>")
+def edit_question(qid):
+    if not admin():
+        return forbidden()
+    params = validated_question(request.get_json(silent=True))
+    if params is None:
+        return jsonify(error="ข้อมูลข้อสอบไม่ถูกต้อง"), 400
+    params["id"] = qid
+    count = execute("""UPDATE questions SET subject_id=:sid,text=:q,options=:opts,
+                     answer=:answer,explain=:explain WHERE id=:id""", params)
+    if not count:
+        return jsonify(error="ไม่พบข้อสอบ"), 404
+    return jsonify(ok=True)
+
+
+@app.patch("/api/admin/questions/<int:qid>/active")
+def set_question_active(qid):
+    if not admin():
+        return forbidden()
+    data = request.get_json(silent=True) or {}
+    if type(data.get("active")) is not bool:
+        return jsonify(error="สถานะไม่ถูกต้อง"), 400
+    count = execute("UPDATE questions SET active=:active WHERE id=:id",
+                    {"active": data["active"], "id": qid})
+    if not count:
+        return jsonify(error="ไม่พบข้อสอบ"), 404
+    return jsonify(ok=True)
+
 
 @app.post("/api/quiz/grade")
 def grade():
@@ -329,3 +404,5 @@ if __name__ == "__main__":
         print("Admin configured.")
     else:
         app.run(host=args.host, port=args.port, debug=False)
+
+
