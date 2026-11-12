@@ -29,6 +29,36 @@ def init():
             c.execute('INSERT INTO questions(subject_id,text,options,answer,explain) VALUES(?,?,?,?,?)',(1,'ข้อใดเป็นบ่อเกิดแห่งหนี้ตามกฎหมายแพ่ง?',json.dumps(['นิติกรรมและนิติเหตุ','เฉพาะคำพิพากษา','เฉพาะสัญญาซื้อขาย','เฉพาะการกระทำละเมิด'],ensure_ascii=False),0,'บ่อเกิดแห่งหนี้อาจเกิดจากนิติกรรมและนิติเหตุ ทั้งนี้เป็นโจทย์ตัวอย่างเพื่อฝึกทบทวน'))
 init()
 def hashpw(p,s):return hashlib.pbkdf2_hmac('sha256',p.encode(),bytes.fromhex(s),600000).hex()
+
+def bootstrap_admin():
+    """Create the first admin without overwriting existing accounts."""
+    username = os.environ.get('MSU_ADMIN_USERNAME', '').strip()
+    password = os.environ.get('MSU_ADMIN_PASSWORD', '')
+
+    if not username and not password:
+        return
+
+    if not username or len(password) < 12:
+        raise RuntimeError(
+            'Set MSU_ADMIN_USERNAME and MSU_ADMIN_PASSWORD '
+            '(at least 12 characters)'
+        )
+
+    with conn() as c:
+        existing = c.execute(
+            'SELECT 1 FROM admins LIMIT 1'
+        ).fetchone()
+
+        if existing:
+            return
+
+        salt = secrets.token_hex(16)
+        c.execute(
+            'INSERT INTO admins(username,salt,password_hash) VALUES(?,?,?)',
+            (username, salt, hashpw(password, salt))
+        )
+
+bootstrap_admin()
 def admin():return bool(session.get('admin'))
 def forbidden():return jsonify(error='ต้องเข้าสู่ระบบผู้ดูแล'),403
 def rowdict(r):return dict(r)
