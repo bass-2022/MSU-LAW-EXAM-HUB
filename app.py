@@ -33,6 +33,10 @@ if database_url.startswith("postgres://"):
     database_url = "postgresql://" + database_url[len("postgres://"):]
 engine = create_engine(database_url, pool_pre_ping=True, pool_recycle=1800)
 
+import member_api
+member_api.configure(engine)
+app.register_blueprint(member_api.bp)
+
 required_r2 = ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME")
 missing_r2 = [name for name in required_r2 if not os.environ.get(name)]
 if missing_r2:
@@ -121,6 +125,7 @@ def init():
                                          "เฉพาะสัญญาซื้อขาย", "เฉพาะการกระทำละเมิด"], ensure_ascii=False),
                      "answer": 0,
                      "explain": "บ่อเกิดแห่งหนี้อาจเกิดจากนิติกรรมและนิติเหตุ ทั้งนี้เป็นโจทย์ตัวอย่างเพื่อฝึกทบทวน"})
+    member_api.migrate()
     bootstrap_admin()
 
 def admin():
@@ -324,4 +329,3 @@ if __name__ == "__main__":
         print("Admin configured.")
     else:
         app.run(host=args.host, port=args.port, debug=False)
-
