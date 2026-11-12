@@ -1,4 +1,0 @@
-
-<img src="{{ url_for('static', filename='logo.png') }}"
-     alt="MSU LAW EXAM HUB"
-     style="width:48px;height:48px;object-fit:contain;">
