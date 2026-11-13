@@ -126,6 +126,22 @@ def init():
                                          "เฉพาะสัญญาซื้อขาย", "เฉพาะการกระทำละเมิด"], ensure_ascii=False),
                      "answer": 0,
                      "explain": "บ่อเกิดแห่งหนี้อาจเกิดจากนิติกรรมและนิติเหตุ ทั้งนี้เป็นโจทย์ตัวอย่างเพื่อฝึกทบทวน"})
+        c.execute(text("""CREATE TABLE IF NOT EXISTS developer_profile (
+            id INTEGER PRIMARY KEY, display_name TEXT NOT NULL,
+            role TEXT NOT NULL, bio TEXT NOT NULL,
+            facebook TEXT NOT NULL, instagram TEXT NOT NULL,
+            github TEXT NOT NULL, email TEXT NOT NULL,
+            photo_key TEXT NOT NULL DEFAULT '')"""))
+        c.execute(text("""INSERT INTO developer_profile
+            (id,display_name,role,bio,facebook,instagram,github,email,photo_key)
+            VALUES (1,:name,:role,:bio,:facebook,:instagram,:github,:email,'')
+            ON CONFLICT (id) DO NOTHING"""), {
+            "name": "นายศิริโรจน์ ภูวงษ์", "role": "Founder & Developer",
+            "bio": "ผู้พัฒนาเว็บไซต์ MSU LAW EXAM HUB เพื่อสนับสนุนการเรียนรู้และการเตรียมสอบกฎหมาย",
+            "facebook": "https://www.facebook.com/Siriroat2004",
+            "instagram": "https://www.instagram.com/siriroat2004/",
+            "github": "https://github.com/bass-2022",
+            "email": "Siriroat.b@gmail.com"})
     member_api.migrate()
     bootstrap_admin()
 
@@ -380,6 +396,113 @@ def grade():
 def too_big(error):
     return jsonify(error="ไฟล์มีขนาดเกิน 10 MB"), 413
 
+
+
+# V2.4: public developer profile; editing requires existing admin session.
+DEFAULT_DEVELOPER = {
+    "displayName": "นายศิริโรจน์ ภูวงษ์", "role": "Founder & Developer",
+    "bio": "ผู้พัฒนาเว็บไซต์ MSU LAW EXAM HUB เพื่อสนับสนุนการเรียนรู้และการเตรียมสอบกฎหมาย",
+    "facebook": "https://www.facebook.com/Siriroat2004",
+    "instagram": "https://www.instagram.com/siriroat2004/",
+    "github": "https://github.com/bass-2022", "email": "Siriroat.b@gmail.com",
+    "photoUrl": "/static/developer.jpg"
+}
+
+def developer_record():
+    try:
+        return fetchone("SELECT * FROM developer_profile WHERE id=1")
+    except Exception:
+        app.logger.exception("Developer profile unavailable; run --init-db")
+        return None
+
+@app.get("/api/developer")
+def get_developer():
+    row = developer_record()
+    if not row:
+        return jsonify(DEFAULT_DEVELOPER)
+    return jsonify(displayName=row["display_name"], role=row["role"],
+                   bio=row["bio"], facebook=row["facebook"],
+                   instagram=row["instagram"], github=row["github"],
+                   email=row["email"],
+                   photoUrl="/api/developer/photo" if row["photo_key"] else "/static/developer.jpg")
+
+@app.put("/api/admin/developer")
+def edit_developer():
+    if not admin():
+        return forbidden()
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify(error="ข้อมูลไม่ถูกต้อง"), 400
+    import urllib.parse
+    fields = {"display_name": ("displayName", 120), "role": ("role", 120),
+              "bio": ("bio", 1200), "facebook": ("facebook", 500),
+              "instagram": ("instagram", 500), "github": ("github", 500),
+              "email": ("email", 250)}
+    values = {}
+    for column, (key, limit) in fields.items():
+        value = data.get(key, "")
+        if not isinstance(value, str) or len(value.strip()) > limit:
+            return jsonify(error="ข้อมูลยาวเกินกำหนด"), 400
+        values[column] = value.strip()
+    if not values["display_name"] or not values["bio"]:
+        return jsonify(error="กรุณาระบุชื่อและคำแนะนำตัว"), 400
+    for field in ("facebook", "instagram", "github"):
+        value = values[field]
+        if value:
+            parsed = urllib.parse.urlsplit(value)
+            if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+                return jsonify(error="ลิงก์โซเชียลต้องเป็น HTTPS"), 400
+    if values["email"] and ("@" not in values["email"] or " " in values["email"]):
+        return jsonify(error="รูปแบบอีเมลไม่ถูกต้อง"), 400
+    execute("""UPDATE developer_profile SET display_name=:display_name,role=:role,
+              bio=:bio,facebook=:facebook,instagram=:instagram,github=:github,
+              email=:email WHERE id=1""", values)
+    return jsonify(ok=True)
+
+@app.post("/api/admin/developer/photo")
+def upload_developer_photo():
+    if not admin():
+        return forbidden()
+    uploaded = request.files.get("photo")
+    if not uploaded:
+        return jsonify(error="กรุณาเลือกรูปภาพ"), 400
+    data = uploaded.read(4 * 1024 * 1024 + 1)
+    if len(data) > 4 * 1024 * 1024:
+        return jsonify(error="รูปภาพต้องไม่เกิน 4 MB"), 400
+    from PIL import Image, UnidentifiedImageError
+    try:
+        picture = Image.open(io.BytesIO(data))
+        picture.verify()
+        picture = Image.open(io.BytesIO(data)).convert("RGB")
+        picture.thumbnail((1400, 1400))
+        out = io.BytesIO()
+        picture.save(out, format="JPEG", quality=85, optimize=True)
+        out.seek(0)
+    except (UnidentifiedImageError, OSError, ValueError):
+        return jsonify(error="ไฟล์รูปภาพไม่ถูกต้อง"), 400
+    key = "developer/" + uuid.uuid4().hex + ".jpg"
+    try:
+        r2.upload_fileobj(out, R2_BUCKET, key, ExtraArgs={"ContentType": "image/jpeg"})
+        execute("UPDATE developer_profile SET photo_key=:key WHERE id=1", {"key": key})
+    except Exception:
+        app.logger.exception("Developer photo upload failed")
+        return jsonify(error="ไม่สามารถบันทึกรูปภาพได้"), 502
+    return jsonify(ok=True)
+
+@app.get("/api/developer/photo")
+def developer_photo():
+    row = developer_record()
+    if not row or not row["photo_key"]:
+        return app.send_static_file("developer.jpg")
+    try:
+        obj = r2.get_object(Bucket=R2_BUCKET, Key=row["photo_key"])
+        response = send_file(io.BytesIO(obj["Body"].read()), mimetype="image/jpeg")
+        response.headers["Cache-Control"] = "public, max-age=300"
+        return response
+    except (ClientError, BotoCoreError, OSError):
+        app.logger.exception("Developer photo download failed")
+        return app.send_static_file("developer.jpg")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--init-db", action="store_true")
@@ -404,5 +527,4 @@ if __name__ == "__main__":
         print("Admin configured.")
     else:
         app.run(host=args.host, port=args.port, debug=False)
-
 
