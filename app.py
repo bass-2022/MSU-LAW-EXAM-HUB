@@ -36,11 +36,12 @@ engine = create_engine(database_url, pool_pre_ping=True, pool_recycle=1800)
 import member_api
 member_api.configure(engine)
 app.register_blueprint(member_api.bp)
-
 import exam35_api
 exam35_api.configure(engine)
 app.register_blueprint(exam35_api.bp)
-
+import question37_api
+question37_api.configure(engine)
+app.register_blueprint(question37_api.bp)
 required_r2 = ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME")
 missing_r2 = [name for name in required_r2 if not os.environ.get(name)]
 if missing_r2:
@@ -148,7 +149,7 @@ def init():
             "email": "Siriroat.b@gmail.com"})
     member_api.migrate()
     exam35_api.migrate()
-    bootstrap_admin()
+    question37_api.migrate()
 
 def admin():
     return bool(session.get("admin"))
