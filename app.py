@@ -62,6 +62,9 @@ r2 = boto3.client(
     region_name="auto",
 )
 
+import essay38_api
+essay38_api.configure(engine, r2, R2_BUCKET)
+app.register_blueprint(essay38_api.bp)
 CATS = ["กฎหมายแพ่ง", "กฎหมายอาญา", "กฎหมายมหาชน", "กฎหมายวิธีพิจารณา",
         "กฎหมายพาณิชย์", "กฎหมายระหว่างประเทศ"]
 SEEDS = [
@@ -157,7 +160,7 @@ def init():
     member_api.migrate()
     exam35_api.migrate()
     question37_api.migrate()
-
+    essay38_api.migrate()
 def admin():
     return bool(session.get("admin"))
 
