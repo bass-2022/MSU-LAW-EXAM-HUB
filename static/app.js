@@ -101,6 +101,31 @@ $('#questionForm').onsubmit=async e=>{
 };
 
 
+// V2.4.1: Format the existing biography without changing the API or stored text.
+function renderDeveloperBio(bio){
+  const raw=String(bio||'').trim();
+  const intro=$('#developerIntro'), section=$('#developerExperienceSection'), list=$('#developerExperience');
+  list.replaceChildren();
+  // The admin's original biography uses hyphens before each position.
+  // Keep the original editable text intact in the admin form.
+  const chunks=raw.split(/\s*[-–—]\s*(?=อดีต|ประธาน|รองประธาน)/u).map(s=>s.trim()).filter(Boolean);
+  const first=chunks.shift()||'';
+  const cleanIntro=first.replace(/^ประวัติการทำงาน\s*[-–—:]?\s*/u,'').trim();
+  const introText=cleanIntro && !/^ประวัติการทำงาน$/u.test(cleanIntro)?cleanIntro:'';
+  intro.textContent=introText || 'ผู้พัฒนาเว็บไซต์ MSU LAW EXAM HUB เพื่อสนับสนุนการเรียนรู้และการเตรียมสอบกฎหมาย';
+  for(const [i,chunk] of chunks.entries()){
+    const item=el('article',undefined,'dev-experience-item');
+    const icon=el('span',i<2?'🎓':'🏅','dev-experience-icon');icon.setAttribute('aria-hidden','true');
+    const copy=el('div',undefined,'dev-experience-copy');
+    const name=el('p',chunk.replace(/\s*ปีการศึกษา\s*\d{4}/u,'').trim(),'dev-experience-name');
+    const year=chunk.match(/ปีการศึกษา\s*\d{4}/u);
+    copy.append(name);
+    if(year)copy.append(el('p',year[0],'dev-experience-meta'));
+    item.append(icon,copy);list.append(item);
+  }
+  section.classList.toggle('hidden',chunks.length===0);
+}
+
 // V2.4 developer profile, no changes to existing quiz/member workflows.
 let developerData=null;
 async function loadDeveloper(){
@@ -108,7 +133,7 @@ async function loadDeveloper(){
     const d=await api('/developer');developerData=d;
     $('#developerName').textContent=d.displayName||'';
     $('#developerRole').textContent=d.role||'';
-    $('#developerBio').textContent=d.bio||'';
+    renderDeveloperBio(d.bio);
     $('#developerPhoto').src=(d.photoUrl||'/static/developer.jpg')+'?v='+Date.now();
     const links=$('#developerLinks');links.replaceChildren();
     for(const [label,url] of [['Facebook',d.facebook],['Instagram',d.instagram],['GitHub',d.github]]){
