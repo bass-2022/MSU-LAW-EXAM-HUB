@@ -7,6 +7,12 @@ from flask import Blueprint, jsonify, render_template, request, session, Respons
 from sqlalchemy import text
 
 bp=Blueprint('question37',__name__)
+@bp.before_request
+def protect_question37_admin():
+    if not session.get("admin"):
+        return jsonify(
+            error="ไม่มีสิทธิ์เข้าถึง กรุณาเข้าสู่ระบบผู้ดูแล"
+        ), 403
 _engine=None
 DIFFICULTIES={'easy','medium','hard'}
 HEADERS=['subject_id','text','option_1','option_2','option_3','option_4','answer','explain','topic','difficulty','statute']
