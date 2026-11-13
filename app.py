@@ -63,7 +63,7 @@ r2 = boto3.client(
 )
 
 import essay38_api
-essay38_api.configure(engine, r2, R2_BUCKET)
+essay38_api.configure(engine)
 app.register_blueprint(essay38_api.bp)
 CATS = ["กฎหมายแพ่ง", "กฎหมายอาญา", "กฎหมายมหาชน", "กฎหมายวิธีพิจารณา",
         "กฎหมายพาณิชย์", "กฎหมายระหว่างประเทศ"]
