@@ -13,7 +13,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
-
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 app = Flask(__name__)
 secret = os.environ.get("MSU_SECRET_KEY")
 if not secret:
@@ -25,6 +26,12 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("MSU_HTTPS", "1") == "1",
     PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri="memory://",
 )
 database_url = os.environ.get("DATABASE_URL", "")
 if not database_url:
@@ -163,16 +170,14 @@ def security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
-
 @app.route("/")
 def home():
     return render_template("index.html")
-
 @app.get("/api/session")
 def auth_state():
     return jsonify(admin=admin(), username=session.get("admin"))
-
 @app.post("/api/login")
+@limiter.limit("5 per minute; 20 per hour")
 def login():
     data = request.get_json(silent=True) or {}
     username, password = str(data.get("username", "")), str(data.get("password", ""))
