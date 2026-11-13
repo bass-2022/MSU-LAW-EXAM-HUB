@@ -3,3 +3,4 @@ Gunicorn>=23,<24
 SQLAlchemy>=2.0,<3
 psycopg[binary]>=3.2,<4
 boto3>=1.35,<2
+Pillow>=10.0,<13
