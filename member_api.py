@@ -83,41 +83,98 @@ def check_origin():
 def member_page():
     return render_template('members.html')
 
+
 @bp.post('/api/members/register')
 def register():
-    d=request.get_json(silent=True) or {}
-    email=str(d.get('email','')).strip().lower()
-    name=str(d.get('displayName','')).strip()
-    password=str(d.get('password',''))
-    if not re.fullmatch(r'[^\s@]{1,100}@[^\s@]{1,100}\.[^\s@]{2,30}',email) or not (2<=len(name)<=80) or not (12<=len(password)<=256):
-        return jsonify(error='กรุณากรอกอีเมล ชื่อ 2–80 ตัวอักษร และรหัสผ่านอย่างน้อย 12 ตัวอักษร'),400
-    salt=secrets.token_hex(16)
+    d = request.get_json(silent=True) or {}
+
+    email = str(d.get('email', '')).strip().lower()
+    name = str(d.get('displayName', '')).strip()
+    student_id = str(d.get('studentId', '')).strip()
+    password = str(d.get('password', ''))
+    confirm_password = str(d.get('confirmPassword', ''))
+
+    try:
+        year_level = int(d.get('yearLevel'))
+    except (ValueError, TypeError):
+        return jsonify(error='กรุณาเลือกชั้นปี'), 400
+
+    if not (2 <= len(name) <= 80):
+        return jsonify(error='กรุณากรอกชื่อ-สกุล 2–80 ตัวอักษร'), 400
+
+    if not re.fullmatch(r'[0-9]{8,15}', student_id):
+        return jsonify(error='รหัสนิสิตต้องเป็นตัวเลข 8–15 หลัก'), 400
+
+    if year_level not in (1, 2, 3, 4, 5, 6):
+        return jsonify(error='ชั้นปีไม่ถูกต้อง'), 400
+
+    if not re.fullmatch(
+        r'[^\s@]{1,100}@[^\s@]{1,100}\.[^\s@]{2,30}',
+        email
+    ):
+        return jsonify(error='รูปแบบอีเมลไม่ถูกต้อง'), 400
+
+    if not (12 <= len(password) <= 256):
+        return jsonify(error='รหัสผ่านต้องมีอย่างน้อย 12 ตัวอักษร'), 400
+
+    if password != confirm_password:
+        return jsonify(error='รหัสผ่านทั้งสองช่องไม่ตรงกัน'), 400
+
+    salt = secrets.token_hex(16)
+
     try:
         with _engine.begin() as c:
-            member_id=c.execute(text('''INSERT INTO members(email,display_name,password_salt,password_hash)
-              VALUES(:e,:n,:s,:h) RETURNING id'''),{'e':email,'n':name,'s':salt,'h':_hash(password,salt)}).scalar_one()
+            c.execute(text('''
+                INSERT INTO members (
+                    email, display_name, student_id,
+                    year_level, password_salt, password_hash
+                )
+                VALUES (:e, :n, :sid, :year, :s, :h)
+            '''), {
+                'e': email,
+                'n': name,
+                'sid': student_id,
+                'year': year_level,
+                's': salt,
+                'h': _hash(password, salt)
+            })
+
     except IntegrityError:
-        return jsonify(error='อีเมลนี้ถูกใช้งานแล้ว'),409
-    session.clear();session['member_id']=member_id;session.permanent=True
-    return jsonify(ok=True,displayName=name),201
+        return jsonify(error='อีเมลนี้ถูกใช้งานแล้ว'), 409
+
+    # ไม่เข้าสู่ระบบอัตโนมัติหลังสมัคร
+    return jsonify(
+        ok=True,
+        message='สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ'
+    ), 201
+
 
 @bp.post('/api/members/login')
 def login():
-    d=request.get_json(silent=True) or {}
-    email=str(d.get('email','')).strip().lower()
-    password=str(d.get('password',''))
-    if len(email)>254 or len(password)>256:
-        return jsonify(error='ข้อมูลเข้าสู่ระบบไม่ถูกต้อง'),400
-    with _engine.connect() as c:
-        r=c.execute(text('SELECT * FROM members WHERE email=:e'),{'e':email}).mappings().first()
-    # Perform work even if account absent, to reduce account-enumeration timing leakage.
-    salt=r['password_salt'] if r else '00'*16
-    actual=_hash(password,salt)
-    if not r or not hmac.compare_digest(actual,r['password_hash']):
-        return jsonify(error='อีเมลหรือรหัสผ่านไม่ถูกต้อง'),401
-    session.clear();session['member_id']=r['id'];session.permanent=True
-    return jsonify(ok=True,displayName=r['display_name'])
+    d = request.get_json(silent=True) or {}
+    email = str(d.get('email', '')).strip().lower()
+    password = str(d.get('password', ''))
 
+    if len(email) > 254 or len(password) > 256:
+        return jsonify(error='ข้อมูลเข้าสู่ระบบไม่ถูกต้อง'), 400
+
+    with _engine.connect() as c:
+        r = c.execute(
+            text('SELECT * FROM members WHERE email=:e'),
+            {'e': email}
+        ).mappings().first()
+
+    salt = r['password_salt'] if r else '00' * 16
+    actual = _hash(password, salt)
+
+    if not r or not hmac.compare_digest(actual, r['password_hash']):
+        return jsonify(error='อีเมลหรือรหัสผ่านไม่ถูกต้อง'), 401
+
+    session.clear()
+    session['member_id'] = r['id']
+    session.permanent = True
+
+    return jsonify(ok=True, displayName=r['display_name'])
 @bp.post('/api/members/logout')
 def logout():
     session.clear()
