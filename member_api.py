@@ -83,6 +83,15 @@ def check_origin():
 def member_page():
     return render_template('members.html')
 
+@bp.get('/register')
+def register_page():
+    return render_template('register.html')
+
+
+@bp.get('/login')
+def login_page():
+    return render_template('login.html')
+
 
 @bp.post('/api/members/register')
 def register():
