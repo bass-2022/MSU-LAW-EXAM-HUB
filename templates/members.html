@@ -78,6 +78,64 @@ function renderLearningAnalytics(rows){
  const weak=groups.filter(g=>g.percent<70);if(!weak.length){const p=document.createElement('p');p.className='analytics-hint';p.textContent='ยังไม่มีวิชาที่มีคะแนนเฉลี่ยต่ำกว่า 70% ลองฝึกต่อเนื่องเพื่อรักษาระดับคะแนน';review.append(p)}else{for(const g of weak){const p=document.createElement('p');p.className='analytics-row';p.textContent='📖 '+g.name+' — เฉลี่ย '+g.percent+'% ควรทบทวนเนื้อหาและฝึกทำข้อสอบเพิ่ม';review.append(p)}}
 }
 
-async function refresh(){try{const u=await api('/api/members/me');$('auth').hidden=true;$('profile').hidden=false;$('welcome').textContent='สวัสดี '+u.displayName;const s=await api('/api/members/stats');$('stats').replaceChildren();for(const t of [`สอบ ${s.attempts} ครั้ง`,`ตอบ ${s.questions} ข้อ`,`คะแนนเฉลี่ย ${s.averagePercent}%`,`ฝึก ${s.subjects} วิชา`]){const el=document.createElement('span');el.textContent=t;$('stats').append(el)}const rows=await api('/api/members/attempts');renderLearningAnalytics(rows);$('history').replaceChildren();for(const r of rows){const tr=document.createElement('tr');for(const t of [r.subjectName,`${r.score}/${r.total}`,new Date(r.createdAt).toLocaleString('th-TH')]){const td=document.createElement('td');td.textContent=t;tr.append(td)}$('history').append(tr)}}catch(e){$('auth').hidden=false;$('profile').hidden=true}}
+        
+async function refresh() {
+    try {
+        const u = await api('/api/members/me');
+
+        $('auth').hidden = true;
+        $('profile').hidden = false;
+        $('welcome').textContent = 'สวัสดี ' + u.displayName;
+
+        const s = await api('/api/members/stats');
+        $('stats').replaceChildren();
+
+        for (const t of [
+            `สอบ ${s.attempts} ครั้ง`,
+            `ตอบ ${s.questions} ข้อ`,
+            `คะแนนเฉลี่ย ${s.averagePercent}%`,
+            `ฝึก ${s.subjects} วิชา`
+        ]) {
+            const el = document.createElement('span');
+            el.textContent = t;
+            $('stats').append(el);
+        }
+
+        const rows = await api('/api/members/attempts');
+        renderLearningAnalytics(rows);
+
+        $('history').replaceChildren();
+
+        for (const r of rows) {
+            const tr = document.createElement('tr');
+
+            for (const value of [
+                r.subjectName,
+                `${r.score}/${r.total}`,
+                new Date(r.createdAt).toLocaleString('th-TH')
+            ]) {
+                const td = document.createElement('td');
+                td.textContent = value;
+                tr.append(td);
+            }
+
+            $('history').append(tr);
+        }
+    } catch (e) {
+        $('auth').hidden = true;
+        $('profile').hidden = true;
+
+        if (
+            e.message === 'กรุณาเข้าสู่ระบบสมาชิก' ||
+            e.message === 'ไม่พบบัญชี'
+        ) {
+            window.location.replace('/login');
+        } else {
+            msg('ไม่สามารถโหลดข้อมูลสมาชิกได้: ' + e.message);
+        }
+    }
+}
 refresh();
-</script></body></html>
+</script>
+</body>
+</html>
