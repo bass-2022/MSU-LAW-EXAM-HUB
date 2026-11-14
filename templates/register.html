@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>สมัครสมาชิก | MSU LAW EXAM HUB</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #f2f7fc;
+      color: #12304d;
+    }
+    header {
+      background: white;
+      padding: 20px;
+      text-align: center;
+      border-bottom: 1px solid #dbe7f3;
+    }
+    main {
+      max-width: 540px;
+      margin: 36px auto;
+      padding: 0 16px;
+    }
+    .card {
+      background: white;
+      border: 1px solid #dbe7f3;
+      border-radius: 18px;
+      padding: 30px;
+    }
+    h1 { font-size: 25px; margin-top: 0; }
+    label {
+      display: block;
+      margin: 16px 0 6px;
+      font-weight: 600;
+    }
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #b8cce0;
+      border-radius: 9px;
+      font: inherit;
+    }
+    button {
+      width: 100%;
+      padding: 13px;
+      margin-top: 24px;
+      background: #176bc0;
+      border: 0;
+      border-radius: 9px;
+      color: white;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .6; cursor: wait; }
+    a { color: #176bc0; }
+    .hint { color: #627d96; font-size: 13px; }
+    #msg { color: #b12b2b; }
+    .bottom { text-align: center; margin-top: 22px; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>⚖️ MSU LAW EXAM HUB</strong>
+  </header>
+
+  <main>
+    <section class="card">
+      <h1>สมัครสมาชิกนิสิต V3.9</h1>
+      <p class="hint">กรอกข้อมูลเพื่อสร้างบัญชีสมาชิก</p>
+
+      <form id="registerForm">
+        <label for="name">ชื่อ-สกุล</label>
+        <input id="name" autocomplete="name"
+               minlength="2" maxlength="80" required>
+
+        <label for="studentId">รหัสนิสิต</label>
+        <input id="studentId" inputmode="numeric"
+               pattern="[0-9]{8,15}"
+               minlength="8" maxlength="15" required>
+        <p class="hint">กรอกตัวเลข 8–15 หลัก</p>
+
+        <label for="yearLevel">ชั้นปี</label>
+        <select id="yearLevel" required>
+          <option value="">เลือกชั้นปี</option>
+          <option value="1">ชั้นปีที่ 1</option>
+          <option value="2">ชั้นปีที่ 2</option>
+          <option value="3">ชั้นปีที่ 3</option>
+          <option value="4">ชั้นปีที่ 4</option>
+          <option value="5">ชั้นปีที่ 5</option>
+          <option value="6">ชั้นปีที่ 6</option>
+        </select>
+
+        <label for="registerEmail">อีเมล</label>
+        <input id="registerEmail" type="email"
+               autocomplete="email" required>
+
+        <label for="registerPassword">รหัสผ่าน</label>
+        <input id="registerPassword" type="password"
+               minlength="12" maxlength="256"
+               autocomplete="new-password" required>
+        <p class="hint">รหัสผ่านอย่างน้อย 12 ตัวอักษร</p>
+
+        <label for="confirmPassword">ยืนยันรหัสผ่าน</label>
+        <input id="confirmPassword" type="password"
+               minlength="12" maxlength="256"
+               autocomplete="new-password" required>
+
+        <p id="msg" role="status" aria-live="polite"></p>
+
+        <button id="submitBtn" type="submit">
+          สมัครสมาชิก
+        </button>
+      </form>
+
+      <p class="bottom">
+        มีบัญชีแล้ว?
+        <a href="/login">เข้าสู่ระบบสมาชิก</a>
+      </p>
+    </section>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    $('registerForm').addEventListener('submit', async e => {
+      e.preventDefault();
+
+      const password = $('registerPassword').value;
+      const confirmPassword = $('confirmPassword').value;
+      const msg = $('msg');
+      const btn = $('submitBtn');
+
+      msg.textContent = '';
+
+      if (password !== confirmPassword) {
+        msg.textContent = 'รหัสผ่านทั้งสองช่องไม่ตรงกัน';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'กำลังสมัครสมาชิก...';
+
+      try {
+        const response = await fetch('/api/members/register', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            displayName: $('name').value.trim(),
+            studentId: $('studentId').value.trim(),
+            yearLevel: $('yearLevel').value,
+            email: $('registerEmail').value.trim(),
+            password: password,
+            confirmPassword: confirmPassword
+          })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'สมัครสมาชิกไม่สำเร็จ');
+        }
+
+        alert('สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ');
+        window.location.replace('/login');
+
+      } catch (error) {
+        msg.textContent = error.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'สมัครสมาชิก';
+      }
+    });
+  </script>
+</body>
+</html>
