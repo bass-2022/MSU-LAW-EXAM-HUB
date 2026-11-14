@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>เข้าสู่ระบบสมาชิก | MSU LAW EXAM HUB</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #f2f7fc;
+      color: #12304d;
+    }
+    header {
+      background: white;
+      padding: 20px;
+      text-align: center;
+      border-bottom: 1px solid #dbe7f3;
+    }
+    main {
+      max-width: 500px;
+      margin: 55px auto;
+      padding: 0 16px;
+    }
+    .card {
+      background: white;
+      padding: 32px;
+      border: 1px solid #dbe7f3;
+      border-radius: 18px;
+    }
+    h1 { font-size: 26px; margin-top: 0; }
+    label {
+      display: block;
+      margin: 18px 0 7px;
+      font-weight: 600;
+    }
+    input {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #b8cce0;
+      border-radius: 9px;
+      font: inherit;
+    }
+    button {
+      width: 100%;
+      padding: 13px;
+      margin-top: 24px;
+      background: #176bc0;
+      border: none;
+      border-radius: 9px;
+      color: white;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .6; }
+    a { color: #176bc0; }
+    .hint { color: #627d96; }
+    .bottom { text-align: center; margin-top: 24px; }
+    #msg { color: #b12b2b; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>⚖️ MSU LAW EXAM HUB</strong>
+  </header>
+
+  <main>
+    <section class="card">
+      <h1>เข้าสู่ระบบสมาชิก</h1>
+      <p class="hint">
+        สำหรับนิสิตที่สมัครสมาชิกแล้ว
+      </p>
+
+      <form id="loginForm">
+        <label for="email">อีเมล</label>
+        <input id="email" type="email"
+               autocomplete="email" required>
+
+        <label for="password">รหัสผ่าน</label>
+        <input id="password" type="password"
+               autocomplete="current-password" required>
+
+        <p id="msg" role="status" aria-live="polite"></p>
+
+        <button id="loginBtn" type="submit">
+          เข้าสู่ระบบ
+        </button>
+      </form>
+
+      <p class="bottom">
+        ยังไม่มีบัญชี?
+        <a href="/register">สมัครสมาชิก</a>
+      </p>
+
+      <p class="bottom">
+        <a href="/">กลับหน้าหลัก</a>
+      </p>
+    </section>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    $('loginForm').addEventListener('submit', async e => {
+      e.preventDefault();
+
+      const btn = $('loginBtn');
+      const msg = $('msg');
+
+      msg.textContent = '';
+      btn.disabled = true;
+      btn.textContent = 'กำลังเข้าสู่ระบบ...';
+
+      try {
+        const response = await fetch('/api/members/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: $('email').value.trim(),
+            password: $('password').value
+          })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            result.error || 'เข้าสู่ระบบไม่สำเร็จ'
+          );
+        }
+
+        window.location.replace('/members');
+
+      } catch (error) {
+        msg.textContent = error.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'เข้าสู่ระบบ';
+      }
+    });
+  </script>
+</body>
+</html>
